@@ -17,7 +17,8 @@
     "dev": "bun run --conditions=browser ./src/index.ts",
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
     "db": "bun drizzle-kit",
-    "index":  "bun run /Users/fangxiang/opencode-dev-my/packages/opencode/src/index.ts"
+    "index":  "bun run /Users/fangxiang/opencode-dev-my/packages/opencode/src/index.ts",
+    "log": "tail -f ~/.local/share/opencode/log/dev.log"
   },
   "bin": {
     "opencode": "./bin/opencode"

@@ -344,8 +344,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             produce((draft) => {
                global.myLog(draft, `
                 ||||||||||||||||||||||||||||||||||||||||||||||||||||||
-                ||
-                || case "message.part.delta"
+                || 这是Tui主线程 event.subscribe((event, { workspace }) 订阅的事件处理函数，
+                || switch (event.type) 
+                ||   当前处在 case "message.part.delta"
                 ||
                 ||||||||||||||||||||||||||||||||||||||||||||||||||||||
                 `)

@@ -242,7 +242,7 @@ export const layer = Layer.effect(
           })
           ctx.toolcalls[input.id] = {
             ...existing.call,
-            partID: part.id,p
+            partID: part.id,
             messageID: part.messageID,
             sessionID: part.sessionID,
           }
@@ -305,6 +305,15 @@ export const layer = Layer.effect(
       // handleEvent 函数里 switch case 的分支名（"text-start"、"text-delta"）和 AI SDK 事件名一样，
       // 这是有意对齐的——翻译层基本不做语义变换。
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
+        global.myLog(value, `
+          handleEventhandleEventhandleEventhandleEventhandleEventhandleEvent
+          || 这是后台 worker 的 handleEvent函数，它的事件与LLM事件一一对应，LLM返回的流不断调用这个函数.
+          || 事件: '${value.type}'
+          ||
+          ||handleEventhandleEventhandleEventhandleEventhandleEventhandleEvent
+          
+          
+          `)
         switch (value.type) {
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
@@ -795,14 +804,25 @@ export const layer = Layer.effect(
             // 像一条水管一样不断往外冒事件（text-start、text-delta、text-end、tool-call...）
             // Vercel AI SDK 就是调大模型的"发动机"。你启动 streamText()，它内部通过 HTTP/WebSocket 连上 OpenAI/Anthropic 等厂商，
             // 返回一个叫 fullStream 的异步迭代器，一个个往外吐事件。这些事件就是 "text-start"、"text-delta"、"text-end" 等
-
+            // console.log('streamInput-streamInput', streamInput)
             const stream = llm.stream(streamInput) // --------- 请求大模型
 
             yield* stream.pipe( // ------消费这个流
               // handleEvent 函数里 switch case 的分支名（"text-start"、"text-delta"）和 AI SDK 事件名一样，
               // 这是有意对齐的——翻译层基本不做语义变换。
-              Stream.tap((event) => handleEvent(event)),// 逐个事件处理
-              
+
+              Stream.tap((event) => { // {"type":"text-delta","id":"txt-0","text":"有什么"} 
+                global.myLog(event, `
+                  eventeventeventeventeventeventeventeventevent
+                  event
+                  event
+                  event
+                  eventeventeventeventeventeventeventeventevent
+                  `)
+                return handleEvent(event)
+              }),// 逐个事件处理
+
+              // Stream.tap((event) => handleEvent(event)),// 逐个事件处理
               Stream.takeUntil(() => ctx.needsCompaction),// 上下文溢出则终止
               Stream.runDrain, // 跑到流结束
             )

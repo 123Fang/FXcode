@@ -16,6 +16,7 @@ import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 
+//system.ts 是 opencode 的 系统提示词（System Prompt）生成服务。它负责动态拼接发送给 LLM 的"基础指令"。
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
     return [PROMPT_BEAST]
@@ -45,6 +46,17 @@ export const layer = Layer.effect(
     const skill = yield* Skill.Service
 
     return Service.of({
+      /**
+     * environment: 生成运行环境信息块
+     *
+     * 产出示例：
+     *   You are powered by the model named deepseek-v4-pro...
+     *   <env>
+     *     Working directory: /Users/xxx
+     *     Platform: darwin
+     *     Today's date: Thu Jun 25 2026
+     *   </env>
+     */
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
         const ctx = yield* InstanceState.context
         return [
@@ -61,11 +73,31 @@ export const layer = Layer.effect(
           ].join("\n"),
         ]
       }),
-
+       /**
+       * skills: 生成可用技能列表块
+       *
+       * 流程：
+       *   1. 检查 agent 权限，skill 被禁用则跳过
+       *   2. 调用 Skill.Service.available() 获取所有匹配的技能
+       *   3. 用 Skill.fmt(verbose: true) 格式化输出
+       *
+       * 产出示例（你 system prompt 里看到的）：
+       *   <available_skills>
+       *     <skill>
+       *       <name>brainstorming</name>
+       *       <description>You MUST use this before any creative work...</description>
+       *     </skill>
+       *     ...
+       *   </available_skills>
+       *
+       * 注意注释：verbose 版本放这里（system prompt），简化版放 tool description。
+       * 因为 agents 对 system prompt 里的详细信息吸收更好。
+       */
       skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {
         if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
         const list = yield* skill.available(agent)
+        // console.log('SystemPrompt 中的所有 skills:', list)
 
         return [
           "Skills provide specialized instructions and workflows for specific tasks.",

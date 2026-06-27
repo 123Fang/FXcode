@@ -146,6 +146,30 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
     })
 }
 
+/**
+ * 注册一个工具，返回工具的元信息（Info）。
+ *
+ * 这个函数类似一个"工具注册工厂"：你只需要提供工具的唯一标识（id）和工具的定义（init），
+ * 它会自动帮你注入以下横切能力，无需在每个工具里手动处理：
+ *
+ * 1. **参数校验**：编译你提供的 Schema 解码器，每次 LLM 调用工具时自动校验入参，
+ *    校验失败会抛出 InvalidArgumentsError，模型可以据此修正输入后重试。
+ * 2. **输出截断**：工具执行完毕后自动对输出做 truncate，超出限制的部分会写入临时文件，
+ *    同时在 metadata 中标记 truncated 和 outputPath。
+ * 3. **遥测/追踪**：为每次工具调用附加 tool.name、session.id、message.id 等 span 属性，
+ *    方便在 OpenTelemetry 等系统中追踪。
+ *
+ * @typeParam Parameters - 工具入参的 Schema 类型（必须是 Schema.Decoder）
+ * @typeParam Result     - 工具执行后返回的 metadata 类型
+ * @typeParam R          - Effect 环境依赖
+ * @typeParam ID         - 工具 ID 的字面量类型（用于类型安全）
+ *
+ * @param id   - 工具唯一标识，比如 "read"、"bash"
+ * @param init - 一个 Effect，执行后返回工具定义（可以是 DefWithoutID 对象或一个工厂函数）
+ *
+ * @returns 一个 Effect，执行后得到 Info 对象（包含 id 和延迟初始化的 init 方法）。
+ *          同时通过 Object.assign 在返回值上挂载了 .id 属性，方便调用方直接取 id。
+ */
 export function define<
   Parameters extends Schema.Decoder<unknown>,
   Result extends Metadata,

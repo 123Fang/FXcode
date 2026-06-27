@@ -104,14 +104,14 @@ export const layer = Layer.effect(
         log.info("publishing", { type: def.type })
 
         const ps = s.typed.get(def.type)
-        if (ps) yield* PubSub.publish(ps, payload)
-        yield* PubSub.publish(s.wildcard, payload)
+        if (ps) yield* PubSub.publish(ps, payload) //  服务端内部模块之间的通知
+        yield* PubSub.publish(s.wildcard, payload) //  服务端内部模块之间的通知
 
         const dir = yield* InstanceState.directory
         const context = yield* InstanceState.context
         const workspace = yield* InstanceState.workspaceID
 
-        GlobalBus.emit("event", {
+        GlobalBus.emit("event", { // 对 TUI 前端的通知
           directory: dir,
           project: context.project.id,
           workspace,

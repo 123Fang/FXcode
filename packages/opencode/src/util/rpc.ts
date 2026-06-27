@@ -42,7 +42,7 @@ export function client<T extends Definition>(target: {
   target.onmessage = async (evt) => {
     global.myLog(evt.data, `
       ++++++++++++++++++++++++++++++++++++++++++
-      + 主线程 target.onmessage 函数执行
+      + worker线程用postMessage发消息过来，主线程用 target.onmessage 函数对接，执行
       +
       ++++++++++++++++++++++++++++++++++++++++++
       `)

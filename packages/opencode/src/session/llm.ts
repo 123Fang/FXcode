@@ -81,8 +81,24 @@ const live: Layer.Layer<
     const perm = yield* Permission.Service
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
-    // 把参数准备好（格式化消息、配工具、配鉴权），然后选一种"引擎"去调大模型：
+    // ─────────────────────────────────────────────────────────────
+    // run() — 大模型调用的核心引擎
+    // ─────────────────────────────────────────────────────────────
+    // 你可以把它理解为前端的一个 "发送请求 + 拿到流式响应" 的函数。
+    // 类比：fetchEventSource() → 返回一个 ReadableStream<LLMEvent>
+    // 但这里用了 Effect（类似 Redux Saga 的 generator），每一步可以 yield 等待结果。
+    // 函数职责：入参是一堆对话/工具/模型参数，出参是 { type, stream } 或 { type, result }
+    //
+    // 整体流程分 5 步：
+    //  ① 打日志（带标签，方便排查）
+    //  ② 并行拉取依赖（语言模型、配置、Provider 元信息、鉴权）
+    //  ③ 请求预处理（格式化消息、整理 tools、注入 headers）
+    //  ④ 如果是 GitLab Workflow 模型 → 注入工具执行 & 审批回调
+    //  ⑤ 双引擎选路：Native 引擎（实验性）或 AI SDK 引擎（默认）
+    // ─────────────────────────────────────────────────────────────
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      // ① 打日志：给当前这次调用贴标签，类似给 console.log 加前缀
+      //    方便在日志里区分是哪个模型、哪个 session、哪个 agent 发起的请求
       const l = log
         .clone()
         .tag("providerID", input.model.providerID)
@@ -96,6 +112,11 @@ const live: Layer.Layer<
         providerID: input.model.providerID,
       })
 
+      // ② 并行拉取 4 项依赖（类似于 Promise.all，不互相等）
+      //    language  → 实际调用的语言模型实例（如 Claude、GPT）
+      //    cfg       → 全局配置
+      //    item      → Provider 元信息（baseURL、API key 等）
+      //    info      → 鉴权信息（token、headers）
       const [language, cfg, item, info] = yield* Effect.all(
         [
           provider.getLanguage(input.model),
@@ -106,6 +127,9 @@ const live: Layer.Layer<
         { concurrency: "unbounded" },
       )
 
+      // ③ 请求预处理：把原始入参 "翻译" 成具体 provider 能懂的格式
+      //    类似于前端发请求前的 data normalization——
+      //    不同模型需要的消息格式、tool 格式、headers 不一样，这里统一处理
       const isWorkflow = language instanceof GitLabWorkflowLanguageModel
       const prepared = yield* LLMRequestPrep.prepare({
         ...input,
@@ -116,9 +140,11 @@ const live: Layer.Layer<
         isWorkflow,
       })
 
-      // Wire up toolExecutor for DWS workflow models so that tool calls
-      // from the workflow service are executed via opencode's tool system
-      // and results sent back over the WebSocket.
+      // ④ GitLab Workflow 特殊处理：只有模型是 GitLabWorkflowLanguageModel 时才走这里
+      //    简单说就是给这个 "工作流模型" 注入两个回调：
+      //      toolExecutor    → 当模型想调用工具时，由 opencode 这边实际执行工具并回传结果
+      //      approvalHandler → 当模型想执行需要用户审批的工具时，弹权限确认框
+      //    正常用 Claude/GPT 时，这整段 if 都不会进去
       if (language instanceof GitLabWorkflowLanguageModel) {
         const workflowModel = language as GitLabWorkflowLanguageModel & {
           sessionID?: string
@@ -203,6 +229,8 @@ const live: Layer.Layer<
         })
       }
 
+      // ⑤ 可选：开启 OpenTelemetry 链路追踪（类似前端的 Sentry / Aegis 埋点）
+      //    如果配置里开了 experimental.openTelemetry，就给每次 LLM 调用绑上 trace span
       const tracer = cfg.experimental?.openTelemetry
         ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
         : undefined
@@ -219,6 +247,20 @@ const live: Layer.Layer<
           })
         : undefined
 
+      // ⑥ 双引擎选路 — 决定"谁来真正调用大模型"
+      // ┌──────────────────────────────────────────────────────────┐
+      // │ 引擎 A：Native Runtime（实验性，需设环境变量开启）          │
+      // │   基于 @opencode-ai/llm 自己封装的调用层                  │
+      // │   开启条件：环境变量 OPENCODE_EXPERIMENTAL_NATIVE_LLM=1  │
+      // │   → 成功时直接返回 { type: "native", stream }            │
+      // │   → 该 provider 不支持时 fallback 到引擎 B               │
+      // ├──────────────────────────────────────────────────────────┤
+      // │ 引擎 B：AI SDK（默认，当前使用）                          │
+      // │   基于 vercel/ai 库的 streamText()                       │
+      // │   调用 OpenAI / Anthropic / Google 等各家 provider       │
+      // │   → 返回 { type: "ai-sdk", result }                     │
+      // │   → 上层需要通过 LLMAISDK.toLLMEvents() 转成统一事件流   │
+      // └──────────────────────────────────────────────────────────┘
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
       if (flags.experimentalNativeLlm) {
@@ -269,8 +311,12 @@ const live: Layer.Layer<
           "llm.model": input.model.id,
         }),
       )
+      // ── 引擎 B：AI SDK 默认路径 ──
+      // 用 vercel/ai 的 streamText() 发起真正的 LLM 请求
+      // 返回的 result.fullStream 是原始事件流，上层 stream() 会把它转成统一的 LLMEvent
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
+      
       return {
         type: "ai-sdk" as const,
         result: streamText({
@@ -351,6 +397,15 @@ const live: Layer.Layer<
       Stream.scoped(
         Stream.unwrap(
           Effect.gen(function* () {
+            //////////////////////// fx ////////////////////////////////////////////////
+            global.myLog(input, `
+              LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+              L
+              L stream函数(这里是喂给大模型的数据)
+              L
+              LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+              `)
+            ///////////////////////// fx ///////////////////////////////////////////////
             const ctrl = yield* Effect.acquireRelease( // 可中断控制
               Effect.sync(() => new AbortController()),
               (ctrl) => Effect.sync(() => ctrl.abort()),

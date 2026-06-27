@@ -1,5 +1,5 @@
 import { Config } from "effect"
-
+// ：环境变量的中央入口。项目里所有通过环境变量控制的行为开关，都统一从这里读取。（好比前端的 process.env 常量文件）
 function truthy(key: string) {
   const value = process.env[key]?.toLowerCase()
   return value === "true" || value === "1"

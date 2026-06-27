@@ -71,7 +71,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         })
         .pipe(Effect.orDie),
   })
-
+  // 工具
   for (const item of yield* registry.tools({
     modelID: ModelID.make(input.model.api.id),
     providerID: input.model.providerID,
@@ -114,7 +114,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       },
     })
   }
-
+  // mcp
   for (const [key, item] of Object.entries(yield* mcp.tools())) {
     const execute = item.execute
     if (!execute) continue
@@ -201,7 +201,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       )
     tools[key] = item
   }
-
+  // console.log('打印发给llm的工具 (和mcp,如果有mcp的话)：', tools)
   return tools
 })
 

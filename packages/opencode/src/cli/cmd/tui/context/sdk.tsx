@@ -21,7 +21,12 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const abort = new AbortController()
     let sse: AbortController | undefined
 
+    // createSDK 函数返回的是 sdk.client.session.prompt(...)
+    // 这是sdk的最终形态
     function createSDK() {
+      /**
+       * createOpencodeClient 内部 return new OpencodeClient({ client })
+       * **/
       return createOpencodeClient({
         baseUrl: props.url,
         signal: abort.signal,
@@ -131,10 +136,11 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
     return {
       get client() {
-        return sdk
+        // 发消息给worker服务端
+        return sdk // sdk.client.session.prompt(...)
       },
       directory: props.directory,
-      event: emitter,
+      event: emitter, // sdk.event.on(...)
       fetch: props.fetch ?? fetch,
       url: props.url,
     }

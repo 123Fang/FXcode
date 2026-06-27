@@ -1641,12 +1641,11 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   //////////////////////// createEffect fx for test //////////////////////////////////
    createEffect(() => {
      global.myLog(props.part, `
-        &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-        & TextPart 组件
-        & ${props.part.text.trim()}
+        &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+        &   TextPart 组件中更新时候触发（使用createEffect）
+        &   ${props.part.text.trim()}
         &
-        &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-    
+        &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
     `)
    });
   /////////////////////////createEffect fx for test ///////////////////////////////////
