@@ -1694,12 +1694,15 @@ export const layer = Layer.effect(
           yield* status.set(sessionID, { type: "busy" })
           yield* slog.info("loop", { step })
 
+          // ↓ 从 DB 加载消息 → 压缩过滤 → 重排为 [摘要user, 摘要asst, ...tail..., 继续user]
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
+          // ↓ 提取关键消息摘要：最新 user、assistant、已完成的 assistant、待处理 task
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
+          // ↓ 通过 role + id 定位最后一条 assistant 消息的完整体（含 parts 数组）
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
           )
@@ -1730,7 +1733,9 @@ export const layer = Layer.effect(
             break
           }
 
+          // ↓ 步数递增（仅限通过"准备 LLM 调用"分支，task 分支 continue 不过此处）
           step++
+
           // ↓ 第一步时启动后台标题生成（不阻塞主循环）
           if (step === 1)
             yield* title({
@@ -1740,7 +1745,9 @@ export const layer = Layer.effect(
               history: msgs,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
+          // ↓ 获取完全解析的模型实例（含 provider、endpoint、token 等）
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+          // ↓ 弹出待处理的 compaction/subtask 任务
           const task = tasks.pop()
 
           // ↓ 如果有子任务待处理 → 先处理子任务
@@ -1772,6 +1779,7 @@ export const layer = Layer.effect(
             continue
           }
 
+          // ↓ 获取 agent 配置（模式、权限、系统提示词等）
           const agent = yield* agents.get(lastUser.agent)
           if (!agent) {
             const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
@@ -1780,7 +1788,9 @@ export const layer = Layer.effect(
             yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
             throw error
           }
+          // ↓ agent 配置的最大步数限制，防止死循环
           const maxSteps = agent.steps ?? Infinity
+          // ↓ 是否是最后一步（达到 maxSteps 上限后，本轮不发工具给 LLM，强制它直接回答）
           const isLastStep = step >= maxSteps
 
           // ↓ 应用提醒（如"30分钟过去了，你该做总结了"）
@@ -1830,8 +1840,11 @@ export const layer = Layer.effect(
 
           // ════════════ 单轮处理：LLM 调用 + 工具执行 + 结果判断 ════════════
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
+            // ↓ 最后一条 user 消息（可能含 agent part，用于多 agent 切换）
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+            // ↓ 如果 user 消息中包含 agent part → 跳过工具权限检查（切换 agent 内部逻辑）
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+            // ↓ 暴露 cancel / prompt / resolvePromptParts 给子 agent（task 工具使用）
             const promptOps = yield* ops()
 
             // ↓ 解析当前 agent 可用的工具集
@@ -1921,6 +1934,7 @@ export const layer = Layer.effect(
               return "break" as const
             }
 
+            // ↓ 判断 LLM 是否已正常结束（finish 存在且不是 tool-calls / unknown）
             const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
             if (finished && !handle.message.error) {
               if (format.type === "json_schema") {
@@ -1934,7 +1948,9 @@ export const layer = Layer.effect(
               }
             }
 
+            // ↓ processor 明确要求停止 → 退出循环
             if (result === "stop") return "break" as const
+            // ↓ processor 要求压缩（如 LLM 返回 context_length_exceeded）→ 创建压缩任务
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,
@@ -1944,6 +1960,7 @@ export const layer = Layer.effect(
                 overflow: !handle.message.finish,
               })
             }
+            // ↓ 默认继续循环（下一轮会检测到新工具调用/压缩任务）
             return "continue" as const
           }).pipe(
             // ↓ 每轮结束时清理 instruction 缓存

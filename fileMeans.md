@@ -190,3 +190,42 @@ taskTool.execute()
 | `tool-input-start` | 365 | 首次收到工具调用 → 创建 ToolPart |
 | `tool-input-end` | 374 | 标记 `inputEnded = true` |
 | `tool-call` | 392 | 工具调用完整就绪 → 确保 ToolPart 存在，写入参数 |
+
+<br/><br/><br/><br/><br/>
+
+## src/session/message-v2.ts
+> 2026-06-27
+
+[vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/session/message-v2.ts](vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/session/message-v2.ts)
+
+#### 用户输入的问题
+
+LLM 回复的数据会有一个 parts 字段，这个字段是 LLM 的一次完整回复吗？
+
+#### 回答
+
+`parts` 是 **一个 `streamText()` 调用中 LLM 返回的完整响应**，不是多次调用的汇总。
+
+```ts
+// message-v2.ts:554-561
+export type WithParts = {
+  info: Info          // 消息元信息（id, role, modelID 等）
+  parts: Part[]       // TextPart | ReasoningPart | ToolPart | ...
+}
+```
+
+一次 `streamText()` 调用产出一条 assistant 消息，它的 `parts` 数组可以包含多种类型混合在同一轮响应中：
+
+```
+一次 LLM 调用
+  → Assistant Message
+    parts: [
+      ReasoningPart,   // "我先分析一下..."
+      ToolPart(read),  // "我需要读取文件"
+      ToolPart(bash),  // "还需要执行命令"
+      TextPart,        // "根据结果，答案是..."
+      ToolPart(write), // "等等，还需要写文件"
+    ]
+```
+
+每个 `ToolPart` 内部还有 `state` 字段追踪工具执行状态（`pending` → `running` → `completed`），执行结果是同一个 LLM 流中 AI SDK 自动执行工具后逐个填入的。
