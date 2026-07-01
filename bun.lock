@@ -421,7 +421,7 @@
     },
     "packages/opencode": {
       "name": "fxcode",
-      "version": "1.15.11",
+      "version": "1.0.4",
       "bin": {
         "opencode": "./bin/opencode",
       },

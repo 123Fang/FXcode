@@ -1443,10 +1443,12 @@ export function Prompt(props: PromptProps) {
     if (store.mode === "shell") {
       if (!shell().length) return undefined
       const example = shell()[store.placeholder % shell().length]
-      return `Run a command... "${example}"`
+      // return `Run a command... "${example}"`
+      return `使用命令... "${example}"`
     }
     if (!list().length) return undefined
-    return `Ask anything... "${list()[store.placeholder % list().length]}"`
+    // return `Ask anything... "${list()[store.placeholder % list().length]}"`
+    return `  请 输 入 您 的 问 题`
   })
 
   const workspaceLabel = createMemo<
@@ -1518,7 +1520,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
             width="100%"
           >
-            <text>**** 主输入区 *****</text>
+            <text>---</text>
             <textarea
               width="100%"
               placeholder={placeholderText()}
@@ -1544,7 +1546,7 @@ export function Prompt(props: PromptProps) {
               onSubmit={() => {
                 // IME: double-defer so the last composed character (e.g. Korean
                 // hangul) is flushed to plainText before we read it for submission.
-                setTimeout(() => setTimeout(() => submit(), 0), 0)
+                setTimeout(() => setTimeout(() => submit(), 0), 0) // 发送用户输入的起点
               }}
               onPaste={async (event: PasteEvent) => {
                 if (props.disabled) {

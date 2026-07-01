@@ -1,10 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.15.11",
+  "version": "1.0.4",
   "name": "fxcode",
   "type": "module",
   "license": "MIT",
-  "private": true,
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000",
@@ -145,6 +144,7 @@
     "htmlparser2": "8.0.2",
     "ignore": "7.0.5",
     "immer": "11.1.4",
+    "jpeg-js": "0.4.4",
     "jsonc-parser": "3.3.1",
     "mime-types": "3.0.2",
     "minimatch": "10.0.3",
@@ -154,6 +154,7 @@
     "opencode-poe-auth": "0.0.1",
     "opentui-spinner": "catalog:",
     "partial-json": "0.1.7",
+    "pngjs": "7.0.0",
     "remeda": "catalog:",
     "semver": "^7.6.3",
     "solid-js": "catalog:",
@@ -169,9 +170,7 @@
     "ws": "8.21.0",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:",
-    "jpeg-js": "0.4.4",
-    "pngjs": "7.0.0"
+    "zod": "catalog:"
   },
   "overrides": {
     "drizzle-orm": "catalog:"

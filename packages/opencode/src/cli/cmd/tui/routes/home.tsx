@@ -15,6 +15,9 @@ import { useTuiConfig } from "../context/tui-config"
 import { StarryBackground } from "../component/starry-background.tsx"
 import { BackgroundImage } from "../component/background-image.tsx"
 import { isPlainTerminal } from "../util/terminal.ts"
+import { useExit } from "../context/exit"
+import { useTheme } from "../context/theme"
+
 
 
 
@@ -43,14 +46,17 @@ export function Home() {
     return configured ?? 75
   })
 
-  //
+  //  流星背景图
   const plainTerminal = isPlainTerminal()
   const bgImagePath = createMemo(() => {
     return undefined
   })
   const showMeteor = () => true
 
-
+  // 按钮退出
+  const exit = useExit()
+  const theme = useTheme()
+  const [exitHover, setExitHover] = createSignal(false)
   //
 
   let sent = false
@@ -104,7 +110,8 @@ export function Home() {
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
           <TuiPluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
-            <text>Prompt Prompt Prompt</text>
+            {/* <box alignItems="center" paddingLeft={2} paddingRight={2}><text>退出</text></box> */}
+            <FXbuttonBack/>
             <Prompt ref={bind} right={<TuiPluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
              <text>Prompt Prompt Prompt</text>
           </TuiPluginRuntime.Slot>
@@ -117,5 +124,51 @@ export function Home() {
         <TuiPluginRuntime.Slot name="home_footer" mode="single_winner" />
       </box>
     </>
+  )
+}
+
+// 按钮退出
+function FXbuttonBack() {
+  const themeState = useTheme()
+  const { theme, mode, setMode, locked, lock, unlock } = themeState
+  let themeType: string = mode()
+  const changeThemeType = () => {
+    if (themeType === 'light') {
+      themeType = 'dark'
+    } else {
+       themeType = 'light'
+    }
+    return themeType
+  }
+  const exit = useExit()
+  
+  const [exitHover, setExitHover] = createSignal(false)
+  return (
+     <>
+        <box
+        alignItems="center"
+        paddingLeft={2}
+        paddingRight={2}
+        border={["left", "right", "top", "bottom"]}
+        borderColor={exitHover() ?'#9059ea': '#6d1af2'}
+        onMouseOver={() => setExitHover(true)}
+        onMouseOut={() => setExitHover(false)}
+        onMouseUp={() => void exit()}
+        >
+          <text fg={exitHover() ? '#9059ea': '#6d1af2' }>退出</text>
+      </box>
+      <box
+        alignItems="center"
+        paddingLeft={2}
+        paddingRight={2}
+        border={["left", "right", "top", "bottom"]}
+        borderColor={exitHover() ?'#9059ea': '#6d1af2'}
+        onMouseOver={() => setExitHover(true)}
+        onMouseOut={() => setExitHover(false)}
+        onMouseUp={() => setMode(changeThemeType())}
+        >
+          <text fg={exitHover() ? '#9059ea': '#6d1af2' }>切换暗黑模式</text>
+        </box>
+      </>
   )
 }
