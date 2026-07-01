@@ -1209,8 +1209,8 @@ export function Prompt(props: PromptProps) {
 |
 |-------------------------------------------------
         `)
-      sdk.client.session
-        .prompt({
+      // 上面： const sdk = useSDK()
+      sdk.client.session.prompt({
           sessionID,
           ...selectedModel,
           messageID,

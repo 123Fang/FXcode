@@ -274,7 +274,6 @@ try {
       show(out)
     })
   } else {
-    console.log('执行packages/opencode/src/index.ts')
     // 启动Tui-1 (执行 bun run /Users/fangxiang/opencode-dev-my/packages/opencode/src/index.ts 走这里，启动tui)
     /***
      *   await cli.parse() 如果一直是 pedding状态，程序就会一直停留在wait cli.parse() 这一行，不会继续往下执行。

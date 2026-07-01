@@ -3,7 +3,11 @@ import { createMemo, For, type Accessor } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
 import { useCommandShortcut } from "../../keymap"
 
+// 从默认主题配置中提取主题数量
+
 const themeCount = Object.keys(DEFAULT_THEMES).length
+
+// ========== 类型定义 ==========
 
 type TipPart = { text: string; highlight: boolean }
 type TipShortcut = Accessor<string>
@@ -44,6 +48,8 @@ type Shortcuts = {
 }
 type Tip = string | ((shortcuts: Shortcuts) => string | undefined)
 
+// ========== 解析工具函数：将 {highlight}...{/highlight} 标记拆分为高亮/普通片段 ==========
+
 function parse(tip: string): TipPart[] {
   const parts: TipPart[] = []
   const regex = /\{highlight\}(.*?)\{\/highlight\}/g
@@ -68,8 +74,12 @@ function parse(tip: string): TipPart[] {
   return parts
 }
 
+// ========== 未连接时的默认提示 ==========
+
 const NO_MODELS_TIP = "Run {highlight}/connect{/highlight} to add an AI provider and start coding"
 const NO_MODELS_PARTS = parse(NO_MODELS_TIP)
+
+// ========== 快捷键/文案辅助函数 ==========
 
 function shortcutText(value: string) {
   return `{highlight}${value}{/highlight}`
@@ -93,6 +103,8 @@ function configShortcut(api: TuiPluginApi, command: string): TipShortcut {
       .filter(Boolean)
       .join(", ")
 }
+
+// ========== 核心组件：随机展示一条使用技巧提示 ==========
 
 export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   const theme = useTheme().theme
@@ -160,6 +172,8 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
     </box>
   )
 }
+
+// ========== 提示文案池：180+ 条使用技巧，支持静态文本与动态快捷键注入 ==========
 
 const TIPS: Tip[] = [
   "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",

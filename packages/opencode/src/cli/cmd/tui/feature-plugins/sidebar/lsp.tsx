@@ -22,7 +22,21 @@ function View(props: { api: TuiPluginApi }) {
       </box>
       <Show when={list().length <= 2 || open()}>
         <Show when={list().length === 0}>
-          <text fg={theme().textMuted}>{off() ? "LSPs are disabled" : "LSPs will activate as files are read"}</text>
+          <text fg={theme().textMuted}
+            // fx 添加自定义弹窗，是否开启lsp功能（暂不对接修改lsp相关配置，先只展示ui）
+            onMouseUp={() => {
+              props.api.ui.dialog.replace(() => (
+                <props.api.ui.DialogSelect
+                  title="选择是否启用LSP (自定义)"
+                  options={[
+                    { title: "开启LSP (开启后，读文件时才会被激活)", value: 1 },
+                    { title: "暂不开启", value: 2 },
+                  ]}
+                />
+              ))
+            }
+            }
+          >{off() ? "LSPs are disabled" : "LSPs will activate as files are read"}</text>
         </Show>
         <For each={list()}>
           {(item) => (

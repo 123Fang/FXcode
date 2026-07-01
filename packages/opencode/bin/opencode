@@ -1,12 +1,26 @@
 #!/usr/bin/env node
 
+/**
+ * opencode 命令入口兜底脚本
+ *
+ * 当 postinstall 脚本未执行时（如使用了 --ignore-scripts），
+ * 此脚本负责在 node_modules 中查找正确平台的二进制文件并执行。
+ *
+ * 执行顺序：
+ *   1. 检查 OPENCODE_BIN_PATH 环境变量
+ *   2. 检查本地缓存的 .opencode 文件
+ *   3. 从脚本目录向上遍历 node_modules 查找匹配的二进制包
+ */
+
 const childProcess = require("child_process")
 const fs = require("fs")
 const path = require("path")
 const os = require("os")
 
+// 需要转发给子进程的信号
 const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
 
+// 启动真正的 opencode 二进制进程，并转发信号和退出码
 function run(target) {
   const child = childProcess.spawn(target, process.argv.slice(2), {
     stdio: "inherit",
@@ -17,18 +31,20 @@ function run(target) {
     process.exit(1)
   })
 
+  // 将 kill 信号转发给子进程
   const forwarders = {}
   for (const signal of forwardedSignals) {
     forwarders[signal] = () => {
       try {
         child.kill(signal)
       } catch {
-        // The child may have already exited.
+        // 子进程可能已经退出
       }
     }
     process.on(signal, forwarders[signal])
   }
 
+  // 子进程退出时，以相同方式退出
   child.on("exit", (code, signal) => {
     for (const forwardedSignal of forwardedSignals) {
       process.removeListener(forwardedSignal, forwarders[forwardedSignal])
@@ -43,14 +59,16 @@ function run(target) {
   })
 }
 
+// 用户可通过环境变量直接指定二进制路径
 const envPath = process.env.OPENCODE_BIN_PATH
 
 const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
-//
+// 本地缓存文件路径，postinstall 成功后会复制二进制到此
 const cached = path.join(scriptDir, ".opencode")
 
+// 系统平台映射：Node 的 os.platform() → 包名中的平台标识
 const platformMap = {
   darwin: "darwin",
   linux: "linux",
@@ -70,12 +88,17 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "opencode-" + platform + "-" + arch
+
+// 拼接包名前缀，如 fxcode-darwin-arm64
+const base = "fxcode-" + platform + "-" + arch
+// 二进制在包内的文件名：macOS/Linux 是 opencode，Windows 是 opencode.exe
 const binary = platform === "windows" ? "opencode.exe" : "opencode"
 
+// 检测 CPU 是否支持 AVX2 指令集（用于选择 baseline 变体）
 function supportsAvx2() {
   if (arch !== "x64") return false
 
+  // Linux: 读取 /proc/cpuinfo 检查 avx2 标志
   if (platform === "linux") {
     try {
       return /(^|\s)avx2(\s|$)/i.test(fs.readFileSync("/proc/cpuinfo", "utf8"))
@@ -84,6 +107,7 @@ function supportsAvx2() {
     }
   }
 
+  // macOS: 用 sysctl 查询硬件特性
   if (platform === "darwin") {
     try {
       const result = childProcess.spawnSync("sysctl", ["-n", "hw.optional.avx2_0"], {
@@ -97,6 +121,7 @@ function supportsAvx2() {
     }
   }
 
+  // Windows: 通过 PowerShell 调用 Win32 API 检查处理器特性
   if (platform === "windows") {
     const cmd =
       '(Add-Type -MemberDefinition "[DllImport(""kernel32.dll"")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)'
@@ -123,11 +148,14 @@ function supportsAvx2() {
   return false
 }
 
+// 生成按优先级排列的二进制包名列表
+// 从最精确匹配（当前平台+架构+特性）到最通用匹配
 const names = (() => {
   const avx2 = supportsAvx2()
   const baseline = arch === "x64" && !avx2
 
   if (platform === "linux") {
+    // 检测是否使用 musl libc（Alpine Linux）
     const musl = (() => {
       try {
         if (fs.existsSync("/etc/alpine-release")) return true
@@ -168,6 +196,7 @@ const names = (() => {
   return [base]
 })()
 
+// 从 startDir 向上遍历目录树，在 node_modules 中查找匹配的二进制包
 function findBinary(startDir) {
   let current = startDir
   for (;;) {
@@ -186,6 +215,10 @@ function findBinary(startDir) {
   }
 }
 
+// 按优先级查找二进制：
+// 1. 环境变量 OPENCODE_BIN_PATH
+// 2. 本地缓存文件 .opencode（postinstall 写入的）
+// 3. 遍历 node_modules 查找匹配的二进制包
 const resolved = envPath || (fs.existsSync(cached) ? cached : findBinary(scriptDir))
 if (!resolved) {
   console.error(

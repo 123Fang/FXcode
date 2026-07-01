@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createMemo, createSignal, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount,Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -11,6 +11,15 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useEditorContext } from "@tui/context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../context/tui-config"
+//
+import { StarryBackground } from "../component/starry-background.tsx"
+import { BackgroundImage } from "../component/background-image.tsx"
+import { isPlainTerminal } from "../util/terminal.ts"
+
+
+
+
+
 
 let once = false
 const placeholder = {
@@ -33,6 +42,17 @@ export function Home() {
     if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
     return configured ?? 75
   })
+
+  //
+  const plainTerminal = isPlainTerminal()
+  const bgImagePath = createMemo(() => {
+    return undefined
+  })
+  const showMeteor = () => true
+
+
+  //
+
   let sent = false
 
   onMount(() => {
@@ -67,6 +87,12 @@ export function Home() {
 
   return (
     <>
+      <Show when={!plainTerminal}>
+        <Show when={bgImagePath()} fallback={<StarryBackground meteor={showMeteor} />}>
+          {(p) => <BackgroundImage path={p()} />}
+        </Show>
+      </Show>
+
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
         <box flexGrow={1} minHeight={0} />
         <box height={4} minHeight={0} flexShrink={1} />

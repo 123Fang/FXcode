@@ -8,6 +8,48 @@
 
 2. **`logs()`** — 日志双写 Layer：本地 `EffectLogger.logger` + 远端 `OtlpLogger`（`/v1/logs`），一份不漏。
 
+<br/><br/><br/><br/><br/>
+
+## packages/opencode/script/publish.ts（发布 fxcode 到 npm 仅当前平台）
+> 2026-06-29 12:00:00
+
+[vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/script/publish.ts](vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/script/publish.ts)
+
+#### 用户输入的问题
+
+帮我总结，你这次如何发布的。我下次copy你的命令。
+
+#### 回复
+
+```bash
+# === 发布 fxcode 到 npm（仅当前平台） ===
+
+# 0. 首次需要登录 + 设 token（之后可跳过）
+npm login --registry https://registry.npmjs.org/
+npm config set //registry.npmjs.org/:_authToken <token>
+
+# 1. 构建
+cd packages/opencode
+rm -rf dist
+OPENCODE_VERSION=<版本号> bun run build -- --single --skip-embed-web-ui
+
+# 2. 发布二进制包
+cd dist/fxcode-darwin-*
+bun pm pack && npm publish *.tgz --access public --tag latest --registry https://registry.npmjs.org/
+cd ../../
+
+# 3. 发布主包
+rm -rf dist/fxcode
+OPENCODE_VERSION=<版本号> npm_config_registry=https://registry.npmjs.org/ bun run script/publish.ts
+cd dist/fxcode
+bun pm pack && npm publish *.tgz --access public --tag latest --registry https://registry.npmjs.org/
+```
+
+**注意：**
+- `<版本号>` 每次递增（1.0.3 → 1.0.4），npm 不允许覆盖
+- 第 3 步 publish.ts 会报 `already published` 和 Docker 错误，都忽略，手动 `cd dist/fxcode` 执行发布即可
+- `--skip-embed-web-ui` 是因为你 Node 版本太低跑不起 Vite
+
 3. **`traces()`** — 链路追踪 Layer，用 `@opentelemetry` 生态把 span 发到 `/v1/traces`。额外修复了一个 bug：`@effect/opentelemetry` 创建了 `NodeTracerProvider` 但没注册，导致非 Effect 代码（如 AI SDK）的 span 丢失父子关系，全部变成独立 trace。这里手动注册了 `AsyncLocalStorageContextManager` 来解决。
 
 类比前端接 Sentry / Datadog RUM：配了 endpoint 就上报，没配就不影响核心逻辑。导出 `layer` 根据 `base` 有无决定走增强还是本地模式。
@@ -229,3 +271,277 @@ export type WithParts = {
 ```
 
 每个 `ToolPart` 内部还有 `state` 字段追踪工具执行状态（`pending` → `running` → `completed`），执行结果是同一个 LLM 流中 AI SDK 自动执行工具后逐个填入的。
+
+<br/><br/><br/><br/><br/>
+
+## packages/opencode/script/publish.ts（发布命令逐条解析）
+> 2026-06-29 12:30:00
+
+[vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/script/publish.ts](vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/script/publish.ts)
+
+#### 用户输入的问题
+
+帮我解析每一个命令，我想学习
+
+#### 回答
+
+```bash
+# ① 登录 npm 官方（验证身份），仅首次需要
+npm login --registry https://registry.npmjs.org/
+
+# ② 把 token 存入全局 .npmrc，之后 npm publish 自动携带鉴权
+npm config set //registry.npmjs.org/:_authToken <token>
+
+# ③ 进入 opencode 子包目录
+cd packages/opencode
+
+# ④ 删掉上次构建产物
+rm -rf dist
+
+# ⑤ 构建 — 设置环境变量 OPENCODE_VERSION=1.0.4，传给 build.ts
+#    --single         → 只构建当前平台（macOS arm64 → fxcode-darwin-arm64）
+#    --skip-embed-web-ui → 跳过 Web UI（Vite 需要 Node 20+，你机器是 16）
+#    产物：dist/fxcode-darwin-*/bin/opencode（编译好的可执行文件）
+#         + dist/fxcode-darwin-*/package.json
+OPENCODE_VERSION=<版本号> bun run build -- --single --skip-embed-web-ui
+
+# ⑥ 进入二进制包的构建产物目录
+#    * 通配符匹配 fxcode-darwin-arm64 或 fxcode-darwin-x64
+cd dist/fxcode-darwin-*
+
+# ⑦ bun pm pack → 把当前目录打包成 .tgz 文件
+#    npm publish *.tgz → 把这个 .tgz 发到 npm，access public 公开可见，
+#    tag latest 标记为最新版，--registry 确保发到 npm 官方而非镜像
+bun pm pack && npm publish *.tgz --access public --tag latest --registry https://registry.npmjs.org/
+
+# ⑧ 退回 opencode 包目录
+cd ../../
+
+# ⑨ 删掉上次 publish.ts 生成的 fxcode 目录（避免 binaries 扫描混乱）
+rm -rf dist/fxcode
+
+# ⑩ 运行 publish.ts — 它做三件事：
+#    1. 扫描 dist/*/package.json 收集二进制包名和版本
+#    2. 在 dist/fxcode/ 下组装主包：
+#       - 复制 postinstall.mjs
+#       - 生成 package.json（name:"fxcode-ai"，optionalDependencies 指向二进制包）
+#       - 写入占位 bin/fxcode.exe
+#    3. 尝试用 npm publish 发布（但通常误判"already published"）
+OPENCODE_VERSION=<版本号> npm_config_registry=https://registry.npmjs.org/ bun run script/publish.ts
+
+# ⑪ 进入 publish.ts 组装好的主包目录
+cd dist/fxcode
+
+# ⑫ 打包并发布主包 fxcode-ai
+bun pm pack && npm publish *.tgz --access public --tag latest --registry https://registry.npmjs.org/
+```
+
+---
+
+**问答：**
+
+**Q: 第⑤步 build 和第⑩步 publish.ts 为什么都要设版本号？**
+
+build.ts 把版本号编译进二进制（`fxcode --version` 显示的值）。publish.ts 把版本号写入 `fxcode-ai/package.json` 和 `fxcode-darwin-*/package.json`。两者必须一致。
+
+**Q: 第⑨步为什么要 rm -rf dist/fxcode？**
+
+上次失败的 publish.ts 可能残留了 `dist/fxcode/` 目录，里面 package.json 叫 `fxcode-ai`，它会被第⑩步的扫描当成一个二进制包，导致路径混乱。
+
+**Q: 为什么 publish.ts 会误判 "already published"？**
+
+它的 `published()` 函数在 monorepo workspace 环境下，`npm view <包名>@<版本> version` 的退出码被 Bun shell 的 `.nothrow()` 吞掉，误以为包已存在。所以第⑫步手动覆盖发布。
+
+<br/><br/><br/><br/><br/>
+
+## packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/lsp.tsx
+> 2026-06-30 12:00:00
+
+[vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/lsp.tsx](vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/lsp.tsx)
+
+#### 用户输入的问题
+
+opencode的read tool 在读文件的时候，LSPs are disabled 提示也没有改变。为什么？不是读文件就会改变吗？
+
+因为提示文本是**配置静态检查**，不是动态检测 LSP 运行状态。
+
+看 `lsp.tsx:11`：
+
+```ts
+const off = createMemo(() => !props.api.state.config.lsp)
+```
+
+它只检查 `config.lsp` 是否为 `true`。只要 `opencode.json` 里没设 `"lsp": true`，它就永远是 "LSPs are disabled"，你读多少文件都不会变。"LSPs will activate as files are read" 是说开启后 LSP 会按需启动，不是说"读到文件就会自动开启 LSP 功能"。
+
+需要先在配置里加 `"lsp": true`。
+
+<br/><br/><br/><br/><br/>
+
+## packages/opencode/src/tool/edit.ts
+> 2026-06-30 12:00:00
+
+[vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/tool/edit.ts](vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/tool/edit.ts)
+
+#### 用户输入的问题
+
+AI 能像 IDE 一样看到类型错误和语法问题--- 本质是lsp错误的信息也会一起发给llm？
+
+对，本质就是 LSP 错误信息**嵌入到工具返回值**里一起发给 LLM。
+
+`src/tool/edit.ts:193-197`：
+
+```ts
+yield* lsp.touchFile(filePath, "document")  // 触发 LSP 诊断
+const diagnostics = yield* lsp.diagnostics() // 获取诊断结果
+const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
+if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+```
+
+`apply_patch` 和 `write` 工具也做了同样的事。所以 LLM 看到的工具返回是：
+
+```
+Edit applied successfully.
+
+LSP errors detected in this file, please fix:
+  src/foo.ts:12:5 - Type 'string' is not assignable to type 'number'
+```
+
+LLM 拿到后能主动修复它自己引入的类型错误。不开 LSP，这一步就没了。
+
+<br/><br/><br/><br/><br/>
+
+## 概念总结：opencode 发 HTTP 请求的能力
+> 2026-06-30 12:00:00
+
+#### 用户输入的问题
+
+Q1: opencode 能发邮件/公众号吗？Q2: curl 调这些 API 是标准吗？本质是 HTTP 吗？Q3: HTTP 只有浏览器能发吗？
+
+---
+
+**Q1: opencode 能发邮件/公众号吗？**
+
+内置没有专用工具，但通过 `bash` 工具执行 curl 调 API 能做到。
+
+**Q2: curl 调这些 API 是标准吗？本质是 HTTP 吗？**
+
+是。邮件协议（SMTP）和公众号 API（微信官方 HTTP 接口）都是早已存在的标准。本质就是发 HTTP 请求。
+
+**Q3: HTTP 只有浏览器能发吗？**
+
+不是。HTTP 是七层协议，任何能建 TCP 连接的程序都能发。浏览器只是"会发 HTTP 的程序之一"，curl、Python requests、Go http.Client 都一样，底层协议完全相同。
+
+<br/><br/><br/><br/><br/>
+
+## TUI 弹窗组件 & 样式指南 (api.ui.dialog / Dialog / Theme)
+> 2026-06-30 15:27:04
+
+[vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/cli/cmd/tui/ui/dialog.tsx](vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/cli/cmd/tui/ui/dialog.tsx)
+
+#### 用户输入的问题
+
+props.api.ui.dialog.replace(() => (<box><text fg={theme().text}>弹窗内容</text></box>)) --- 有没有好看的样式。或者直接使用现成的组件
+
+#### 回答
+
+根据代码库分析，你有两种方式：
+
+## 方式一：用现成组件（推荐）
+
+如果场景匹配，直接用 `api.ui` 上挂载的预设组件，不需要自己写样式：
+
+```tsx
+// 确认框
+props.api.ui.dialog.replace(() => (
+  <api.ui.DialogConfirm
+    title="删除确认"
+    message="确定要删除吗？"
+    confirmLabel="确认删除"
+    onConfirm={async () => { /* ... */ }}
+  />
+))
+
+// 提示框
+props.api.ui.dialog.replace(() => (
+  <api.ui.DialogAlert
+    title="提示"
+    message="操作成功"
+  />
+))
+
+// 文本输入
+props.api.ui.dialog.replace(() => (
+  <api.ui.DialogPrompt
+    title="输入名称"
+    placeholder="请输入..."
+    onSubmit={async (value) => { /* ... */ }}
+  />
+))
+
+// 选项列表
+props.api.ui.dialog.replace(() => (
+  <api.ui.DialogSelect
+    title="选择操作"
+    options={[
+      { title: "选项一", value: 1 },
+      { title: "选项二", value: 2 },
+    ]}
+  />
+))
+```
+
+## 方式二：自定义内容样式模板
+
+如果内容必须自定义，参考项目中 dialog 组件的样式模式：
+
+```tsx
+props.api.ui.dialog.replace(() => {
+  const theme = useTheme().theme  // 获取主题
+
+  return (
+    <box padding={1} flexDirection="column">
+      {/* 标题栏：标题 + esc 提示 */}
+      <box flexDirection="row" justifyContent="space-between" paddingBottom={1}>
+        <text bold fg={theme.text}>弹窗标题</text>
+        <text fg={theme.textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>
+          esc
+        </text>
+      </box>
+
+      {/* 正文 */}
+      <box paddingY={1}>
+        <text fg={theme.textMuted}>这里放你的自定义内容</text>
+      </box>
+
+      {/* 底部按钮 */}
+      <box flexDirection="row" justifyContent="flex-end" paddingTop={1}>
+        <box paddingLeft={3} paddingRight={3} paddingY={0}>
+          <text fg={theme.textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>
+            取消
+          </text>
+        </box>
+        <box
+          marginLeft={1}
+          paddingLeft={3} paddingRight={3} paddingY={0}
+          backgroundColor={theme.primary}
+        >
+          <text bold fg={theme.selectedListItemText}>
+            确认
+          </text>
+        </box>
+      </box>
+    </box>
+  )
+})
+```
+
+**关键颜色规范**：
+| 用途 | 颜色 |
+|------|------|
+| 标题/正文 | `theme.text` / `theme.textMuted` |
+| 主按钮背景 | `theme.primary` |
+| 主按钮文字 | `theme.selectedListItemText` |
+| 边框 | `theme.border` |
+| 错误/警告 | `theme.error` / `theme.warning` |
+
+直接用方式一最简单，除非确实需要自定义内容的布局。

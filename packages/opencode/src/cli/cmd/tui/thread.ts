@@ -27,12 +27,13 @@ declare global {
 }
 
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
-
+// 
 function createWorkerFetch(client: RpcClient): typeof fetch {
   const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init)
     const body = request.body ? await request.text() : undefined
-    const result = await client.call("fetch", {
+    // const client = Rpc.client(）；  客户端 client只有  client.call 和 client.on 
+    const result = await client.call("fetch", { // 桥接层，调用 postmessage 
       url: request.url,
       method: request.method,
       headers: Object.fromEntries(request.headers.entries()),
@@ -56,10 +57,20 @@ function createEventSource(client: RpcClient): EventSource {
   }
 }
 
-async function target() {
+async function target() { // 返回 ： { href: "file:///app/src/cli/cmd/tui/worker.ts" }
   if (typeof OPENCODE_WORKER_PATH !== "undefined") return OPENCODE_WORKER_PATH
   const dist = new URL("./cli/cmd/tui/worker.js", import.meta.url)
   if (await Filesystem.exists(fileURLToPath(dist))) return dist
+  /***
+   * 用来拼接绝对路径：
+   * 假设当前文件是 file:///app/src/cli/cmd/tui/thread.ts
+    import.meta.url  // → "file:///app/src/cli/cmd/tui/thread.ts"
+
+    new URL("./worker.ts", import.meta.url)
+    URL { href: "file:///app/src/cli/cmd/tui/worker.ts" }
+
+    其实等价于：path.join(path.dirname(fileURLToPath(import.meta.url)), "worker.ts")
+   * ***/
   return new URL("./worker.ts", import.meta.url)
 }
 
@@ -77,7 +88,7 @@ export function resolveThreadDirectory(project?: string, envPWD = process.env.PW
 }
 
 export const TuiThreadCommand = cmd({
-  command: "$0 [project]",
+  command: "$0 [project]", // 默认自动执行
   describe: "start opencode tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
@@ -143,7 +154,7 @@ export const TuiThreadCommand = cmd({
         [OPENCODE_PROCESS_ROLE]: "worker",
         [OPENCODE_RUN_ID]: ensureRunID(),
       })
-
+      // 启动worker线程 （work中的服务会用onmessage监听主线程的消息）
       const worker = new Worker(file, {
         env,
       })
@@ -157,7 +168,8 @@ export const TuiThreadCommand = cmd({
         })
       }
 
-      const client = Rpc.client<typeof rpc>(worker)
+      // 拿到与 work 线程通信的客户端
+      const client = Rpc.client<typeof rpc>(worker) // 桥接层，client只有 client.on 和 client.call
       const error = (e: unknown) => {
         Log.Default.error("process error", { error: errorMessage(e) })
       }
@@ -206,9 +218,25 @@ export const TuiThreadCommand = cmd({
             events: undefined,
           }
         : {
-            url: "http://opencode.internal",
-            fetch: createWorkerFetch(client),
-            events: createEventSource(client),
+          url: "http://opencode.internal",
+          // createWorkerFetch返回一个代理函数，是client的代理模式： 
+          // 1 构造Request 2 调用client.call("fetch"，{...}) 桥接层
+          fetch: createWorkerFetch(client),
+          // createEventSource 返回一个对象，对象.subscribe(handler) 就订阅了"global.event"事件！
+          events: createEventSource(client),
+
+            /***
+             * function createEventSource(client: RpcClient): EventSource {
+                return {
+                  subscribe: async (handler) => {
+                    return client.on<GlobalEvent>("global.event", (e) => {
+                      handler(e)
+                    })
+                  },
+                }
+              }
+             * 
+             * ***/
           }
 
       try {
@@ -223,11 +251,12 @@ export const TuiThreadCommand = cmd({
         process.exitCode = 1
         return
       }
-
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-      }, 1000).unref?.()
-
+      // changeFix--------start----------------
+      // fx: 线不开启自动更新版本！！！！
+      // setTimeout(() => {
+      //   client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+      // }, 1000).unref?.()
+     // changeFix----------end--------------
       try {
         const { createTuiRenderer, tui } = await import("./app")
         const renderer = await createTuiRenderer(config)

@@ -1,3 +1,11 @@
+/**
+ * LSP（语言服务器协议）调度层
+ *
+ * 整个模块的核心职责：
+ * 1. 管理所有 LSP server 的注册与生命周期（启动/销毁）
+ * 2. 懒加载机制：读到对应类型文件时才按需启动对应的 LSP
+ * 3. 对上层暴露语言服务能力（跳转定义、查找引用、诊断、悬停等）
+ */
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import * as Log from "@opencode-ai/core/util/log"
@@ -113,11 +121,12 @@ const filterExperimentalServers = (servers: Record<string, LSPServer.Info>, flag
 
 type LocInput = { file: string; line: number; character: number }
 
+// LSP 运行时状态，由 InstanceState 管理生命周期（每个项目独立一份）
 interface State {
   clients: LSPClient.Info[]
   servers: Record<string, LSPServer.Info>
-  broken: Set<string>
-  spawning: Map<string, Promise<LSPClient.Info | undefined>>
+  broken: Set<string> // 启动失败的 server key，下次不再重试
+  spawning: Map<string, Promise<LSPClient.Info | undefined>> // 并发去重：key = root + serverId
 }
 
 export interface Interface {
@@ -208,6 +217,16 @@ export const layer = Layer.effect(
       }),
     )
 
+    // ============================================================
+    // ★ 核心函数：根据文件按需获取（懒加载启动）对应的 LSP 客户端
+    //
+    // 流程：
+    // 1. 提取文件扩展名，遍历所有已注册的 LSP server
+    // 2. 按扩展名匹配 server，确定该文件的项目根目录
+    // 3. 已启动的 server 直接复用缓存；未启动的调用 spawn() 按需启动
+    // 4. 启动失败则标记为 broken，下次不再尝试
+    // 5. 并发去重：同一 server 多个并发请求共享同一个 inflight spawning promise
+    // ============================================================
     const getClients = Effect.fnUntraced(function* (file: string) {
       const ctx = yield* InstanceState.context
       if (!containsPath(file, ctx)) return [] as LSPClient.Info[]
@@ -298,11 +317,13 @@ export const layer = Layer.effect(
       })
     })
 
+    // 对单文件操作：获取该文件对应的所有 LSP client，并在每个上执行 fn
     const run = Effect.fnUntraced(function* <T>(file: string, fn: (client: LSPClient.Info) => Promise<T>) {
       const clients = yield* getClients(file)
       return yield* Effect.promise(() => Promise.all(clients.map((x) => fn(x))))
     })
 
+    // 对所有已启动的 LSP client 执行操作（如全局诊断查询）
     const runAll = Effect.fnUntraced(function* <T>(fn: (client: LSPClient.Info) => Promise<T>) {
       const s = yield* InstanceState.get(state)
       return yield* Effect.promise(() => Promise.all(s.clients.map((x) => fn(x))))

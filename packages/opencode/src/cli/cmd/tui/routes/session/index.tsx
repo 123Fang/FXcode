@@ -1389,6 +1389,7 @@ function UserMessage(props: {
             paddingTop={1}
             paddingBottom={1}
             paddingLeft={2}
+            // backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
@@ -1622,7 +1623,8 @@ function ReasoningHeader(props: {
       <Show when={props.toggleable}>
         <span>{props.open ? "- " : "+ "}</span>
       </Show>
-      <span>{props.done ? "Thought" : "Thinking"}</span>
+      {/* <span>{props.done ? "Thought" : "Thinking"}</span> */}
+      <span>{props.done ? "思考完成" : "思考中..."}</span>
       <Show when={props.title || props.duration}>
         <span>: </span>
       </Show>
