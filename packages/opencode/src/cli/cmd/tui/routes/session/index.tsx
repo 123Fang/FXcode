@@ -1232,6 +1232,7 @@ export function Session() {
                       </Match>
                       <Match when={message.role === "user"}>
                         <text>******* 用户消息 *******</text>
+                        <text>{ `【全局状态 sync.data.part】${JSON.stringify(sync.data.part)}` }</text>
                         <UserMessage
                           index={index()}
                           onMouseUp={() => {
@@ -1675,15 +1676,15 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
       <box id={"text-" + props.part.id} position="relative" paddingLeft={3} marginTop={1} flexShrink={0} borderColor='9059ea'>
         <box
           position="absolute"
-          top={0}
+          top={-1.5}
           right={0}
           zIndex={10}
-          backgroundColor={copyHover() ? theme.backgroundElement : theme.primary}
+          backgroundColor={copyHover() ? '#eae0ed': theme.backgroundElement }
           onMouseOver={() => setCopyHover(true)}
           onMouseOut={() => setCopyHover(false)}
           onMouseUp={handleCopy}
         >
-          <text fg={copyHover() ? theme.text : theme.background}> copy </text>
+          <text fg={copyHover() ? theme.text : theme.background}>  复制答案  </text>
         </box>
         <markdown
           syntaxStyle={syntax()}
@@ -1738,6 +1739,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
 
   return (
     <Show when={!shouldHide()}>
+      <text></text>
       <Switch>
         <Match when={props.part.tool === ShellID.ToolID}>
           <Shell {...toolprops} />

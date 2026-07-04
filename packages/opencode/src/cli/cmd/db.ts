@@ -114,6 +114,7 @@ export const DbCommand = cmd({
   command: "db",
   describe: "database tools",
   builder: (yargs: Argv) => {
+    // yargs 命令行"路由"库
     return yargs.command(QueryCommand).command(PathCommand).command(MigrateCommand).demandCommand()
   },
   handler: () => {},

@@ -597,3 +597,37 @@ git status    # 还能告诉你"本地比远程领先/落后几个提交"
 - 之后 `git status` 能显示 `Your branch is ahead of 'origin/master' by 1 commit` 这类提示，就是靠 upstream 才知道跟谁比。
 
 所以你刚才那次 `--set-upstream` 之后，我也提示了「以后直接 `git push` 即可」——就是这个原因。
+
+<br/><br/><br/><br/><br/>
+
+## packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx
+> 2026-07-04 11:00:00
+
+[vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx](vscode://file/Users/fangxiang/opencode-dev-my/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx)
+
+#### 用户输入的问题
+
+/Users/fangxiang/opencode-dev-my/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx--- 这个文件主要在做什么？
+
+#### 回答
+
+**1. 核心职责是什么？**
+
+这是 TUI（终端里的图形界面）**输入框 Prompt 的"状态中枢"**。它本身不画界面，而是用 SolidJS 的 `Context` 把输入框相关的所有状态和操作（输入的文字、当前模式、焦点、历史记录、发送动作）打包起来，提供给内部的子组件共享使用。类似 React 里用 `Context.Provider` 包一层，让下面的组件都能拿到同一份状态。
+
+**2. 核心函数是什么？**
+
+`Prompt` 组件（配合 `usePrompt` hook 和内部的 `send` 方法）。
+
+**3. 核心函数的输入 / 做了什么 / 输出**
+
+| 项目 | 说明 |
+|------|------|
+| **输入** | `props`：子组件 `children`、提交回调 `onSubmit`、初始值 `value`（此外还有变更/模式变更等回调） |
+| **做了什么** | 用 `createSignal` 建了三个状态：输入内容 `value`、模式 `mode`（`chat` 聊天 / `shell` 命令）、是否聚焦 `focused`；用 `createStore` 建了历史记录 `history`（存过往输入的数组 + 当前翻到第几条的索引）。定义 `send()`：拿到当前输入文字，非空就调用 `onSubmit` 回调把它发出去，然后把这条记录塞进历史列表最前面、重置索引、清空输入框 |
+| **输出** | 一个 `PromptContext.Provider`，把上面所有状态和方法（`value`、`setValue`、`send`、`history`、`mode` 等）作为"共享数据"向下传递，外层再包着传进来的 `children` |
+
+补充几个前端可能陌生的点：
+- `untrack(value)`：SolidJS 里读取信号值但"不建立响应式依赖"，避免多余的重新计算。
+- `batch(...)`：把多次状态更新合并成一次，减少界面刷新次数。
+- `Mode` 的 `shell` 指的是把输入当成**终端命令行**来执行（对比 `chat` 是普通对话）。
