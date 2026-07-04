@@ -1647,6 +1647,16 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   // 只精准更新 JSX 中绑定了数据的那一小块 DOM，而不会回头重跑整个函数。
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const toast = useToast()
+  const renderer = useRenderer()
+  const [copyHover, setCopyHover] = createSignal(false)
+
+  const handleCopy = () => {
+    if (renderer.getSelection()?.getSelectedText()) return
+    Clipboard.copy(props.part.text.trim())
+      .then(() => toast.show({ message: "Copied to clipboard", variant: "success" }))
+      .catch(() => toast.show({ message: "Failed to copy", variant: "error" }))
+  }
 
   //////////////////////// createEffect fx for test //////////////////////////////////
    createEffect(() => {
@@ -1662,7 +1672,19 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   return (
     <Show when={props.part.text.trim()}>
       <text>*** TextPart ***</text>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box id={"text-" + props.part.id} position="relative" paddingLeft={3} marginTop={1} flexShrink={0} borderColor='9059ea'>
+        <box
+          position="absolute"
+          top={0}
+          right={0}
+          zIndex={10}
+          backgroundColor={copyHover() ? theme.backgroundElement : theme.primary}
+          onMouseOver={() => setCopyHover(true)}
+          onMouseOut={() => setCopyHover(false)}
+          onMouseUp={handleCopy}
+        >
+          <text fg={copyHover() ? theme.text : theme.background}> copy </text>
+        </box>
         <markdown
           syntaxStyle={syntax()}
           streaming={true}
