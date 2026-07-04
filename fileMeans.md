@@ -545,3 +545,55 @@ props.api.ui.dialog.replace(() => {
 | 错误/警告 | `theme.error` / `theme.warning` |
 
 直接用方式一最简单，除非确实需要自定义内容的布局。
+
+
+
+<br/><br/><br/><br/><br/>
+
+## upstream（git 上游分支）为什么需要
+> 2026-07-04 10:52:44
+
+#### 远程已有 origin/master，本地只是没设 upstream。执行推送并关联：--- upstream 为什么需要这个？
+
+#upstream 是什么
+
+`upstream`（上游分支）就是给你的**本地分支**指定一个**默认对应的远程分支**。设置后，本地 `master` 就"记住"了它对应远程的 `origin/master`。
+
+## 为什么需要它
+
+没设 upstream 时，Git 不知道你的本地分支该跟哪个远程分支对应，所以：
+
+```
+$ git push
+fatal: The current branch master has no upstream branch.
+```
+
+你就必须每次都写全：
+
+```
+git push origin master     # 每次都要指定 远程名 + 分支名
+git pull origin master
+```
+
+设了 upstream 后，Git 记住了对应关系，就能简写：
+
+```
+git push      # 自动 = git push origin master
+git pull      # 自动 = git pull origin master
+git status    # 还能告诉你"本地比远程领先/落后几个提交"
+```
+
+## 一个比喻
+
+把本地分支想成你手机里的联系人。upstream 就是**存好的号码**：
+
+- 没存号码 → 每次打电话都要手输一长串号码（`git push origin master`）
+- 存了号码 → 直接点名字就能打（`git push`）
+
+## 关键点
+
+- `--set-upstream`（简写 `-u`）**只需做一次**，关系就记住了。
+- 它记录在 `.git/config` 里，不是每次 push 都要设。
+- 之后 `git status` 能显示 `Your branch is ahead of 'origin/master' by 1 commit` 这类提示，就是靠 upstream 才知道跟谁比。
+
+所以你刚才那次 `--set-upstream` 之后，我也提示了「以后直接 `git push` 即可」——就是这个原因。
