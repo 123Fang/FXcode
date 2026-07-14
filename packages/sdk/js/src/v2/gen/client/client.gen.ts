@@ -35,6 +35,7 @@ export const createClient = (config: Config = {}): Client => {
     const opts = {
       ..._config,
       ...options,
+      // 这里的 _config.fetch ，就是rpc定义的那个 fetch
       fetch: options.fetch ?? _config.fetch ?? globalThis.fetch,
       headers: mergeHeaders(_config.headers, options.headers),
       serializedBody: undefined,
@@ -65,6 +66,7 @@ export const createClient = (config: Config = {}): Client => {
     return { opts, url }
   }
 
+  // 封装核心函数 request，内部会发送 rpc 请求
   const request: Client["request"] = async (options) => {
     // @ts-expect-error
     const { opts, url } = await beforeRequest(options)
@@ -88,7 +90,7 @@ export const createClient = (config: Config = {}): Client => {
     let response: Response
 
     try {
-      response = await _fetch(request)
+      response = await _fetch(request) // 核心点： 发送rpc请求, 会匹配的理由的path然后执行对应的handler
     } catch (error) {
       // Handle fetch exceptions (AbortError, network errors, etc.)
       let finalError = error
@@ -283,3 +285,11 @@ export const createClient = (config: Config = {}): Client => {
     trace: makeMethodFn("TRACE"),
   } as Client
 }
+
+/***
+ *  本质上就是rpc客户端，
+ *  结果就是：
+ *  用户可以用 xxx.get(Request) xx.post(Request) 发请求（不走网络，其实是发数据）给 路由器
+ * 
+ * 
+ * ***/

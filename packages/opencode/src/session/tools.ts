@@ -19,6 +19,16 @@ import { PartID } from "./schema"
 import * as Log from "@opencode-ai/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
 
+
+/***
+ * tools.ts 是*工具的"组装车间"*。它做三件事：
+      1. 把项目内置工具注册成 AI SDK 能理解的格式（toolRegistry.tools() → tool({ execute })）
+      2. 把 MCP 外部工具做同样转换（mcp.tools() → tool({ execute })）
+      3. 给每个工具的 execute 包一层统一外壳：执行前/后触发插件钩子、记录耗时、截断过长输出、处理中断信号
+      一句话：它把一个 JSON schema + 一段执行逻辑，打包成 AI SDK 能直接调用的 { description, inputSchema, execute } 对象，然后通过 prompt.ts 传给 streamText()。
+ * 
+ * 
+ * ***/
 const log = Log.create({ service: "session.tools" })
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {

@@ -807,14 +807,14 @@ export const TuiThreadCommand = cmd({
        *   直接请求:   axios.create({ baseURL: "http://localhost:4096" })
        *   内部 RPC：   axios.create({ baseURL: "internal://", adapter: rpcAdapter })
        */
-      const transport = external
+      const transport = external // external 在我测试的这个例子中为 false 
         ? {
             url: (await client.call("server", network)).url,
             fetch: undefined,
             events: undefined,
           }
         : {
-            url: "http://opencode.internal",
+            url: "http://opencode.internal", // 不会被使用，仅用于标识
             fetch: createWorkerFetch(client),
             events: createEventSource(client),
           }

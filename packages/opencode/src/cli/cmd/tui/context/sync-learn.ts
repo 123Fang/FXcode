@@ -485,6 +485,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             "part",
             event.properties.messageID,
             produce((draft) => {
+              global.myLog(draft, `
+                ||||||||||||||||||||||||||||||||||||||||||||||||||||||
+                ||
+                || ${event.properties}
+                ||
+                ||||||||||||||||||||||||||||||||||||||||||||||||||||||
+                `)
               const part = draft[result.index]
               // 找到要更新的字段（比如 "text" 字段）
               const field = event.properties.field as keyof typeof part

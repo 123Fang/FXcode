@@ -115,6 +115,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
     onMount(async () => {
       if (props.events) {
+        // props.events.subscribe 内部用 client.on 监听，在主线程onmessage事件中触发 handleEvent
         const unsub = await props.events.subscribe(handleEvent)
         onCleanup(unsub)
 

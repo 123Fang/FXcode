@@ -168,7 +168,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     questionHandlers,
     permissionHandlers,
     providerHandlers,
-    sessionHandlers,
+    sessionHandlers, // 依赖注入。这里是带有hander 的 Layer
     syncHandlers,
     v2Handlers,
     tuiHandlers,
@@ -219,6 +219,8 @@ type RouteRequirements =
   116      middleware: disposeMiddleware,
  * 
  * ***/
+// createRoutes 返回的 Layer 是带有 路由 + handler的了。完备状态。！！！！！！！！！！！！！！
+// 简单的理解成有： 有了path + 命中path的立即执行逻辑
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {

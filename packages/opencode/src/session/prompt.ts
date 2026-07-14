@@ -1271,12 +1271,12 @@ export const layer = Layer.effect(
           yield* status.set(sessionID, { type: "busy" })
           yield* slog.info("loop", { step })
 
-          let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
+          let msgs = yield* MessageV2.filterCompactedEffect(sessionID) // 每轮循环从 DB 重新加载消息，并做压缩过滤+重排：
 
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-
+          
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
           )
@@ -1289,10 +1289,10 @@ export const layer = Layer.effect(
             ) ?? false
 
           if (
-            lastAssistant?.finish &&
-            !["tool-calls"].includes(lastAssistant.finish) &&
-            !hasToolCalls &&
-            lastUser.id < lastAssistant.id
+            lastAssistant?.finish &&  // LLM 已停止生成
+            !["tool-calls"].includes(lastAssistant.finish) && // finish 不是 "tool-calls"
+            !hasToolCalls && // 没有待处理的工具调用
+            lastUser.id < lastAssistant.id // assistant 是对最新 user 的响应
           ) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is MessageV2.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
@@ -1305,7 +1305,7 @@ export const layer = Layer.effect(
               })
             }
             yield* slog.info("exiting loop")
-            break
+            break // 退出循环
           }
 
           step++
@@ -1325,7 +1325,7 @@ export const layer = Layer.effect(
             continue
           }
 
-          if (task?.type === "compaction") {
+          if (task?.type === "compaction") { // 压缩上下文
             const result = yield* compaction.process({
               messages: msgs,
               parentID: lastUser.id,

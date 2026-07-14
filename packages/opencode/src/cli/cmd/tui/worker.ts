@@ -59,20 +59,23 @@ let server: Awaited<ReturnType<typeof Server.listen>> | undefined
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
      //////
-    global.myLog(input, 'opencode/src/cli/cmd/tui/worker.ts ---- rpc 中执行 fetch 然后执行 Server.Default().app.fetch(request) ')
+    global.myLog(input, `
+      opencode/src/cli/cmd/tui/worker.ts 
+        -> rpc 中执行 fetch
+           -> Server.Default().app.fetch(request) `)
     //////
     const headers = { ...input.headers }
     const auth = ServerAuth.header()
     if (auth && !headers["authorization"] && !headers["Authorization"]) {
       headers["Authorization"] = auth
     }
-    const request = new Request(input.url, {
+    const request = new Request(input.url, { //  构造Request
       method: input.method,
       headers,
       body: input.body,
     })
-    const response = await Server.Default().app.fetch(request)
-    const body = await response.text()
+    const response = await Server.Default().app.fetch(request) // 发送给路由服务，会根据path执行对应的handler（不走网络，本地函数调用）
+    const body = await response.text() // 返回调用结果
     return {
       status: response.status,
       headers: Object.fromEntries(response.headers.entries()),
@@ -85,12 +88,16 @@ export const rpc = {
   },
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     //////
-    global.myLog(input, 'opencode/src/cli/cmd/tui/worker.ts ---- rpc 中执行 server 然后执行 listen 函数启动服务')
+    global.myLog(input, `
+      opencode/src/cli/cmd/tui/worker.ts
+        -> rpc 中执行 server
+          -> Server.listen(input) 函数启动服务`)
     //////
     if (server) await server.stop(true)
     server = await Server.listen(input)
     return { url: server.url.toString() }
   },
+  // 检查版本，是否需要更新
   async checkUpgrade(input: { directory: string }) {
     await InstanceRuntime.load({ directory: input.directory })
     await upgrade().catch(() => {})
@@ -111,6 +118,9 @@ export const rpc = {
     if (server) await server.stop(true)
   },
 }
+
+// 这里是服务的worker, 监听客户端发来的消息，用 onmessage 事件监听，然后执行 rcp.fetch 方法
+// rcp.fetch 方法其实是根据传入的 Request，去调用路由的 handler
 
 Rpc.listen(rpc)
 

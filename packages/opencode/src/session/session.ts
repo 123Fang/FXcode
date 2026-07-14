@@ -816,6 +816,7 @@ export const layer: Layer.Layer<
       field: string
       delta: string
     }) {
+      // 把输入原样扔到事件总线上广播出去，不落库、不校验、无副作用
       yield* bus.publish(MessageV2.Event.PartDelta, input)
     })
 

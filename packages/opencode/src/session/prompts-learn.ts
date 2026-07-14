@@ -1769,7 +1769,9 @@ export const layer = Layer.effect(
             continue
           }
 
-          // ↓ 检查上下文是否溢出 → 需要自动压缩
+           // ↓ 检查上下文是否溢出 → 需要自动压缩
+           // 上轮 LLM 刚跑完
+           // ↓ 立刻检查：刚才的回复 + 历史消息 token 超不超？
           if (
             lastFinished &&
             lastFinished.summary !== true &&
@@ -1816,7 +1818,7 @@ export const layer = Layer.effect(
             time: { created: Date.now() },
             sessionID,
           }
-          yield* sessions.updateMessage(msg)
+          yield* sessions.updateMessage(msg) // 写入 DB（只有 info，没有 parts）
 
           // ↓ 取消时的清理函数：标记消息为 abort 状态
           const finalizeInterruptedAssistant = Effect.gen(function* () {
@@ -1837,6 +1839,8 @@ export const layer = Layer.effect(
               model,
             })
             .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
+          // Effect.onInterrupt(() => finalizeInterruptedAssistant)：
+          // 保证中断时 assistant 消息不会被丢在"半成品"状态，而是被标记为已中止。用户按Ctrl+c 中断时。
 
           // ════════════ 单轮处理：LLM 调用 + 工具执行 + 结果判断 ════════════
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {

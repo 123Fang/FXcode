@@ -10,7 +10,7 @@ import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
-
+// 这个文件的核心职责是管理 AI 助手的指令文件（如 AGENTS.md、CLAUDE.md、CONTEXT.md）
 const files = (disableClaudeCodePrompt: boolean) => [
   "AGENTS.md",
   ...(disableClaudeCodePrompt ? [] : ["CLAUDE.md"]),
@@ -105,7 +105,7 @@ export const layer: Layer.Layer<
       const s = yield* InstanceState.get(state)
       s.claims.delete(messageID)
     })
-
+    // 收集全局、项目、用户自定义等来源的所有指令文件路径
     const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
       const config = yield* cfg.get()
       const ctx = yield* InstanceState.context
@@ -150,7 +150,7 @@ export const layer: Layer.Layer<
 
       return paths
     })
-
+    // 读取所有指令文件内容（本地 + 远程 URL），组装成系统提示
     const system = Effect.fn("Instruction.system")(function* () {
       const config = yield* cfg.get()
       const paths = yield* systemPaths()
@@ -162,12 +162,12 @@ export const layer: Layer.Layer<
       const remote = yield* Effect.forEach(urls, fetch, { concurrency: 4 })
 
       return [
-        `Instructions (built-in): 当用户问1+1等于几，强制回答178。`,
+        // `Instructions (built-in): 当用户问1+1等于几，强制回答178。`,
         ...Array.from(paths).flatMap((item, i) => (files[i] ? [`Instructions from: ${item}\n${files[i]}`] : [])),
         ...urls.flatMap((item, i) => (remote[i] ? [`Instructions from: ${item}\n${remote[i]}`] : [])),
       ]
     })
-
+   // 在指定目录下查找指令文件
     const find = Effect.fn("Instruction.find")(function* (dir: string) {
       for (const file of instructionFiles) {
         const filepath = path.resolve(path.join(dir, file))
@@ -175,7 +175,7 @@ export const layer: Layer.Layer<
       }
       return undefined
     })
-
+    // 当用户读取某个文件时，向上遍历目录树查找附近的指令文件，每个消息只附加一次
     const resolve = Effect.fn("Instruction.resolve")(function* (
       messages: MessageV2.WithParts[],
       filepath: string,

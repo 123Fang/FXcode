@@ -70,7 +70,7 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
       "x-opencode-workspace": config.experimental_workspaceID,
     }
   }
-
+  // createClient 方法： 让用户可以用 xxx.get(Request) xx.post(Request) 发请求（不走网络，其实是发数据）给 路由器
   const client = createClient(config)
   client.interceptors.request.use((request) =>
     rewrite(request, {

@@ -533,7 +533,8 @@ export const Event = {
     aggregate: "sessionID",
     schema: PartUpdatedEventSchema,
   }),
-  PartDelta: BusEvent.define(
+  // { type: "message.part.delta" ，sessionID， messageID,.. }
+  PartDelta: BusEvent.define( 
     "message.part.delta",
     Schema.Struct({
       sessionID: SessionID,

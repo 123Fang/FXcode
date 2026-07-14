@@ -1232,7 +1232,7 @@ export function Session() {
                       </Match>
                       <Match when={message.role === "user"}>
                         <text>******* 用户消息 *******</text>
-                        <text>{ `【全局状态 sync.data.part】${JSON.stringify(sync.data.part)}` }</text>
+                        {/* <text>{ `【全局状态 sync.data.part】${JSON.stringify(sync.data.part)}` }</text> */}
                         <UserMessage
                           index={index()}
                           onMouseUp={() => {

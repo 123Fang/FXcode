@@ -7,6 +7,7 @@ import { Truncate } from "@/tool/truncate"
 import { Auth } from "../auth"
 import { ProviderTransform } from "@/provider/transform"
 
+// 各 agent 内嵌的 system prompt 文本模板
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
@@ -26,41 +27,44 @@ import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { type DeepMutable } from "@opencode-ai/core/schema"
 
+// Agent 配置信息 Schema
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
-  mode: Schema.Literals(["subagent", "primary", "all"]),
-  native: Schema.optional(Schema.Boolean),
-  hidden: Schema.optional(Schema.Boolean),
+  mode: Schema.Literals(["subagent", "primary", "all"]), // subagent: 子代理; primary: 主代理; all: 两者皆可
+  native: Schema.optional(Schema.Boolean),               // 是否为内置 agent
+  hidden: Schema.optional(Schema.Boolean),               // 是否隐藏（不在列表中展示）
   topP: Schema.optional(Schema.Finite),
   temperature: Schema.optional(Schema.Finite),
   color: Schema.optional(Schema.String),
-  permission: Permission.Ruleset,
+  permission: Permission.Ruleset,                         // 权限规则集合
   model: Schema.optional(
     Schema.Struct({
       modelID: ModelID,
       providerID: ProviderID,
     }),
   ),
-  variant: Schema.optional(Schema.String),
-  prompt: Schema.optional(Schema.String),
-  options: Schema.Record(Schema.String, Schema.Unknown),
-  steps: Schema.optional(Schema.Finite),
+  variant: Schema.optional(Schema.String),               // 模型变体
+  prompt: Schema.optional(Schema.String),                 // 自定义 system prompt
+  options: Schema.Record(Schema.String, Schema.Unknown),  // 透传的额外配置
+  steps: Schema.optional(Schema.Finite),                  // 最大执行步数
 }).annotate({ identifier: "Agent" })
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
 
+// Agent.generate() 返回的动态生成的 agent 结构
 const GeneratedAgent = Schema.Struct({
   identifier: Schema.String,
   whenToUse: Schema.String,
   systemPrompt: Schema.String,
 })
 
+// Agent 服务对外暴露的接口
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Info[]>
   readonly defaultInfo: () => Effect.Effect<Info>
   readonly defaultAgent: () => Effect.Effect<string>
-  readonly generate: (input: {
+  readonly generate: (input: {                 // 通过 LLM 动态生成 agent 配置
     description: string
     model?: { providerID: ProviderID; modelID: ModelID }
   }) => Effect.Effect<
@@ -73,12 +77,15 @@ export interface Interface {
   >
 }
 
+// InstanceState 缓存的内部状态类型，不包含 generate（generate 直接在 Service 层实现）
 type State = Omit<Interface, "generate">
 
+// Effect Service 声明
 export class Service extends Context.Service<Service, Interface>()("@opencode/Agent") {}
 
 export const use = serviceUse(Service)
 
+// 构建 Agent Service 的 Effect Layer
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -89,10 +96,12 @@ export const layer = Layer.effect(
     const provider = yield* Provider.Service
     const flags = yield* RuntimeFlags.Service
 
+    // State 存储在 InstanceState 中（按工作目录隔离）
     const state = yield* InstanceState.make<State>(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
+        // skill 目录 + 临时目录 + truncate 路径默认 allow
         const whitelistedDirs = [
           Truncate.GLOB,
           path.join(Global.Path.tmp, "*"),
@@ -103,6 +112,7 @@ export const layer = Layer.effect(
           ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
         } satisfies Record<string, "allow" | "ask" | "deny">
 
+        // 默认权限：大多数操作为 allow，question/plan 等为 deny
         const defaults = Permission.fromConfig({
           "*": "allow",
           doom_loop: "ask",
@@ -126,7 +136,9 @@ export const layer = Layer.effect(
 
         const user = Permission.fromConfig(cfg.permission ?? {})
 
+        // 内置 agent 定义（默认权限 + 用户自定义覆盖）
         const agents: Record<string, Info> = {
+          // 默认主代理，拥有大部分权限
           build: {
             name: "build",
             description: "The default agent. Executes tools based on configured permissions.",
@@ -142,6 +154,7 @@ export const layer = Layer.effect(
             mode: "primary",
             native: true,
           },
+          // Plan 模式代理：禁用所有编辑工具，只能读取和写计划文件
           plan: {
             name: "plan",
             description: "Plan mode. Disallows all edit tools.",
@@ -165,6 +178,7 @@ export const layer = Layer.effect(
             mode: "primary",
             native: true,
           },
+          // 通用子代理：用于并行执行多个独立任务
           general: {
             name: "general",
             description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
@@ -179,6 +193,7 @@ export const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
+          // 代码探索子代理：只读工具访问，不能写文件
           explore: {
             name: "explore",
             permission: Permission.merge(
@@ -202,6 +217,7 @@ export const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
+          // 实验性 scout 代理：可读取外部文档、克隆依赖仓库
           ...(flags.experimentalScout
             ? {
                 scout: {
@@ -232,6 +248,7 @@ export const layer = Layer.effect(
                 },
               }
             : {}),
+          // 消息压缩代理：将长对话历史压缩为摘要
           compaction: {
             name: "compaction",
             mode: "primary",
@@ -247,6 +264,7 @@ export const layer = Layer.effect(
             ),
             options: {},
           },
+          // 标题生成代理：为对话生成标题
           title: {
             name: "title",
             mode: "primary",
@@ -263,6 +281,7 @@ export const layer = Layer.effect(
             ),
             prompt: PROMPT_TITLE,
           },
+          // 摘要代理：生成会话摘要
           summary: {
             name: "summary",
             mode: "primary",
@@ -280,6 +299,7 @@ export const layer = Layer.effect(
           },
         }
 
+        // 合并用户配置中的 agent 定义（opencode.json / .opencode/config.*）
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {
           if (value.disable) {
             delete agents[key]
@@ -309,7 +329,7 @@ export const layer = Layer.effect(
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }
 
-        // Ensure Truncate.GLOB is allowed unless explicitly configured
+        // 确保 Truncate.GLOB 没有被显式 deny 时自动设为 allow
         for (const name in agents) {
           const agent = agents[name]
           const explicit = agent.permission.some((r) => {
@@ -325,6 +345,7 @@ export const layer = Layer.effect(
           )
         }
 
+        // InstanceState 内层方法，按 agent 名取配置
         const get = Effect.fnUntraced(function* (agent: string) {
           return agents[agent]
         })
@@ -335,12 +356,13 @@ export const layer = Layer.effect(
             agents,
             values(),
             sortBy(
-              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"], // 默认 agent 排最前
               [(x) => x.name, "asc"],
             ),
           )
         })
 
+        // 获取默认 agent 的 Info（优先用配置的 default_agent，否则取第一个可见主代理）
         const defaultInfo = Effect.fnUntraced(function* () {
           const c = yield* config.get()
           if (c.default_agent) {
@@ -368,6 +390,8 @@ export const layer = Layer.effect(
       }),
     )
 
+    // Service 外层：所有 get/list/defaultInfo/defaultAgent 方法委托给 InstanceState
+    // generate 直接在此实现（不经过 InstanceState，因为需要 runtime 级别的 provider/auth 等）
     return Service.of({
       get: Effect.fn("Agent.get")(function* (agent: string) {
         return yield* InstanceState.useEffect(state, (s) => s.get(agent))
@@ -381,6 +405,7 @@ export const layer = Layer.effect(
       defaultAgent: Effect.fn("Agent.defaultAgent")(function* () {
         return yield* InstanceState.useEffect(state, (s) => s.defaultAgent())
       }),
+      // 通过 LLM 动态生成 agent 配置（用于自定义 agent 的创建流程）
       generate: Effect.fn("Agent.generate")(function* (input: {
         description: string
         model?: { providerID: ProviderID; modelID: ModelID }
@@ -401,6 +426,7 @@ export const layer = Layer.effect(
         const authInfo = yield* auth.get(model.providerID).pipe(Effect.orDie)
         const isOpenaiOauth = model.providerID === "openai" && authInfo?.type === "oauth"
 
+        // OpenAI OAuth 路径不需要 system 消息（使用 providerOptions.instructions 代替）
         const params = {
           experimental_telemetry: {
             isEnabled: cfg.experimental?.openTelemetry,
@@ -431,6 +457,8 @@ export const layer = Layer.effect(
           ),
         } satisfies Parameters<typeof generateObject>[0]
 
+        // OpenAI OAuth 用 streamObject（providerOptions 支持 instructions），
+        // 其他 provider 用 generateObject（标准 system message）
         if (isOpenaiOauth) {
           return yield* Effect.promise(async () => {
             const result = streamObject({
@@ -454,6 +482,7 @@ export const layer = Layer.effect(
   }),
 )
 
+// 开箱即用的 Layer，提供所有依赖的默认实现
 export const defaultLayer = layer.pipe(
   Layer.provide(Plugin.defaultLayer),
   Layer.provide(Provider.defaultLayer),

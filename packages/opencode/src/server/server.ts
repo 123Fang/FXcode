@@ -61,12 +61,24 @@ class ListenerServerService extends Context.Service<ListenerServerService, Liste
   "@opencode/ListenerServer",
 ) {}
 
-export const Default = lazy(() => {
+/***
+ * Default 是核心函数
+ * 
+ * ***/
+export const Default = lazy(() => { // 这是一个lazy的函数，执行一次，后续调用直接返回 { app }
   /////////
   global.myLog('opencode/src/server/server.ts ------  中的 Default 被调用， 它是启动服务的根函数')
   /////////
 
   const handler = HttpApiApp.webHandler().handler
+  /***
+   * HttpApiApp.webHandler() 内部使用effect库的 toWebHandler
+   * 
+   * handler 包含了 路由 path + 对应的handler处理函数，
+   * fetch: (request: Request) => handler(request, HttpApiApp.context) 的结果是：不走网络，而是本地调用！
+   * 
+   * 
+   **/
   const app: ServerApp = {
     fetch: (request: Request) => handler(request, HttpApiApp.context),
     request(input, init) {

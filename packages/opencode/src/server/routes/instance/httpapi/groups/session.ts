@@ -99,7 +99,7 @@ export const SessionPaths = {
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
 } as const
-
+// 定义好了路由path （同时可生成xx.json,文档具备了接口，参数等数据）
 export const SessionApi = HttpApi.make("session")
   .add(
     HttpApiGroup.make("session")
